@@ -563,6 +563,82 @@
       box-shadow: 0 0 18px var(--base-cyan);
     }
     .panel.tab-hidden { display: none !important; }
+
+    .pad-with-scroll {
+      display: flex;
+      gap: 10px;
+      align-items: stretch;
+    }
+    .pad-with-scroll #touchpad {
+      flex: 1;
+      min-width: 0;
+    }
+    .scroll-line {
+      width: 56px;
+      min-width: 56px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background: rgba(0, 255, 136, 0.08);
+      border: 2px solid #00ff88;
+      border-radius: 16px;
+      box-shadow: 0 0 16px rgba(0, 255, 136, 0.4);
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+      cursor: ns-resize;
+      overflow: hidden;
+    }
+    .scroll-line.active {
+      background: rgba(0, 255, 136, 0.22);
+      box-shadow: 0 0 28px rgba(0, 255, 136, 0.75);
+    }
+    .scroll-line-up,
+    .scroll-line-down {
+      flex: 0 0 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #00ff88;
+      font-size: 12px;
+      text-shadow: 0 0 10px #00ff88;
+      pointer-events: none;
+    }
+    .scroll-line-track {
+      flex: 1;
+      width: 100%;
+      position: relative;
+    }
+    .scroll-line-glow {
+      position: absolute;
+      top: 6px;
+      bottom: 6px;
+      left: 50%;
+      width: 4px;
+      margin-left: -2px;
+      border-radius: 4px;
+      background: #00ff88;
+      box-shadow: 0 0 10px #00ff88, 0 0 22px #00ff88;
+      pointer-events: none;
+    }
+    .scroll-line-thumb {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 30px;
+      height: 48px;
+      transform: translate(-50%, -50%);
+      border-radius: 12px;
+      background: linear-gradient(180deg, #c8ffe8, #00ff88 45%, #00bb66);
+      box-shadow: 0 0 14px #00ff88;
+      pointer-events: none;
+    }
+    .scroll-line-hint {
+      margin: 8px 0 0;
+      color: #66ddcc;
+      font-size: 12px;
+      line-height: 1.35;
+    }
 </style>
 </head>
 <body>
@@ -715,6 +791,7 @@
         <!-- TRACKPAD TACTIL -->
         <div style="margin-bottom:20px;">
             <h3 style="color: var(--base-cyan); margin-bottom:10px;">🖐️ Trackpad (mișcă degetul)</h3>
+            <div class="pad-with-scroll">
             <div id="touchpad" style="height:clamp(360px,48vh,520px);min-height:360px;background:rgba(68,255,255,0.07);
                  border:2px solid var(--base-cyan); border-radius:16px;
                  display:flex; align-items:center; justify-content:center;
@@ -722,6 +799,16 @@
                  -webkit-user-select:none; cursor:crosshair; transition:background .15s, border-color .15s;">
                 <span id="touchpadLabel">Atinge și mișcă pentru mouse<br>(scurt = click • ține apăsat = selectează)<br>2 degete = scroll pagini</span>
             </div>
+            <div id="scrollLine" class="scroll-line" role="scrollbar" aria-label="Linie de scroll" aria-orientation="vertical">
+                <div class="scroll-line-up">▲</div>
+                <div class="scroll-line-track">
+                    <div class="scroll-line-glow"></div>
+                    <div id="scrollThumb" class="scroll-line-thumb"></div>
+                </div>
+                <div class="scroll-line-down">▼</div>
+            </div>
+            </div>
+            <p class="scroll-line-hint">Linie scroll: trage sus/jos · tap = un pas · ține apăsat = scroll continuu</p>
             <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:10px;">
                 <button class="btn btn-green" onclick="sendFeedback('click', this)" style="margin:0;">
                     <span class="emoji">👆</span> Click
@@ -1113,11 +1200,11 @@ try {
   const screenHeight = 1080;
 
   // ⚡ FUNCȚIA PRINCIPALĂ PENTRU TRIMITEREA COMENZILOR
-  function sendCommand(cmd, params = '') {
+  function sendCommand(cmd, params = '', silent = false) {
     let url = `http://${serverIP}:${serverPort}/?c=${cmd}`;
     if (params) url += `&${params}`;
 
-    console.log("🔥 URL TRIMIS:", url);
+    if (!silent) console.log("🔥 URL TRIMIS:", url);
 
     fetch(url, { cache: "no-store", mode: "cors" })
       .then(async (response) => {
@@ -1133,6 +1220,7 @@ try {
         return { raw };
       })
       .then((data) => {
+        if (silent) return;
         if (data.json) {
           const j = data.json;
           if (j.ok === false) {
@@ -1149,6 +1237,10 @@ try {
         console.log("✅ Răspuns server:", data.raw);
       })
       .catch(error => {
+        if (silent) {
+          console.error("❌ Eroare conexiune (silent):", error, url);
+          return;
+        }
         showFeedback(`❌ ${error.message} — verifică IP/portul de mai sus și firewall`, true);
         console.error("❌ Eroare conexiune:", error, url);
       });
@@ -1641,7 +1733,7 @@ try {
   function flushScroll() {
     var d = Math.round(scrollAcc);
     scrollAcc -= d;
-    if (d !== 0) sendCommand("mouse_wheel", "delta=" + d);
+    if (d !== 0) sendCommand("mouse_wheel", "delta=" + d, true);
     scrollTimer = null;
   }
   function scheduleScroll() {
@@ -1849,6 +1941,152 @@ try {
     if (mouseDown && !moved) { sendCommand("click"); }
     mouseDown = false;
   });
+})();
+</script>
+
+<!-- LINIE SCROLL: mobil (deget) + desktop (mouse) -->
+<script>
+(function () {
+  var line = document.getElementById("scrollLine");
+  var thumb = document.getElementById("scrollThumb");
+  if (!line) return;
+
+  var lastY = 0;
+  var startY = 0;
+  var acc = 0;
+  var flushTimer = null;
+  var active = false;
+  var moved = false;
+  var holdTimer = null;
+  var holdInterval = null;
+  var holding = false;
+
+  function isEsp32() {
+    return String(serverPort) === "5000";
+  }
+
+  function sendWheelDelta(d) {
+    d = Math.round(d);
+    if (!d) return;
+    if (isEsp32()) {
+      var amt = Math.max(1, Math.min(25, Math.round(Math.abs(d) / 10)));
+      sendCommand(d > 0 ? "scroll_up" : "scroll_down", "amount=" + amt, true);
+    } else {
+      sendCommand("mouse_wheel", "delta=" + d, true);
+    }
+  }
+
+  function flushAcc() {
+    var d = Math.round(acc);
+    acc -= d;
+    if (d) sendWheelDelta(d);
+    flushTimer = null;
+  }
+
+  function scheduleFlush() {
+    if (flushTimer === null) flushTimer = setTimeout(flushAcc, 30);
+  }
+
+  function stopHold() {
+    if (holdTimer !== null) { clearTimeout(holdTimer); holdTimer = null; }
+    if (holdInterval !== null) { clearInterval(holdInterval); holdInterval = null; }
+    if (holding && isEsp32()) sendCommand("stop_scroll", "", true);
+    holding = false;
+  }
+
+  function startHold(dir) {
+    if (holding) return;
+    holding = true;
+    if (isEsp32()) {
+      sendCommand(dir > 0 ? "start_scroll_up" : "start_scroll_down", "", true);
+    } else {
+      holdInterval = setInterval(function () {
+        sendWheelDelta(dir * 90);
+      }, 60);
+    }
+    if (typeof showFeedback === "function") {
+      showFeedback(dir > 0 ? "📜 Scroll continuu SUS" : "📜 Scroll continuu JOS");
+    }
+  }
+
+  function setThumbFromEvent(e) {
+    if (!thumb) return;
+    var r = line.getBoundingClientRect();
+    var t = (e.clientY - r.top) / Math.max(1, r.height);
+    t = Math.max(0.1, Math.min(0.9, t));
+    thumb.style.top = (t * 100) + "%";
+  }
+
+  function dirFromEvent(e) {
+    var r = line.getBoundingClientRect();
+    var t = (e.clientY - r.top) / Math.max(1, r.height);
+    return t < 0.5 ? 1 : -1;
+  }
+
+  function onDown(e) {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    active = true;
+    moved = false;
+    lastY = e.clientY;
+    startY = e.clientY;
+    line.classList.add("active");
+    setThumbFromEvent(e);
+    try { line.setPointerCapture(e.pointerId); } catch (err) {}
+    stopHold();
+    var dir = dirFromEvent(e);
+    holdTimer = setTimeout(function () {
+      holdTimer = null;
+      if (active && !moved) startHold(dir);
+    }, 260);
+  }
+
+  function onMove(e) {
+    if (!active) return;
+    e.preventDefault();
+    var dy = e.clientY - lastY;
+    lastY = e.clientY;
+    if (Math.abs(e.clientY - startY) > 8) {
+      moved = true;
+      if (holdTimer !== null) { clearTimeout(holdTimer); holdTimer = null; }
+      if (holding) stopHold();
+    }
+    if (!holding) {
+      acc += -dy * 8;
+      scheduleFlush();
+    }
+    setThumbFromEvent(e);
+  }
+
+  function onUp(e) {
+    if (!active) return;
+    if (e && e.preventDefault) e.preventDefault();
+    active = false;
+    line.classList.remove("active");
+    var didHold = holding;
+    var ev = e || { clientY: lastY };
+    stopHold();
+    flushAcc();
+    if (!moved && !didHold) {
+      var dir = dirFromEvent(ev);
+      sendWheelDelta(dir * 120);
+      if (typeof showFeedback === "function") {
+        showFeedback(dir > 0 ? "🔺 Scroll sus" : "🔻 Scroll jos");
+      }
+    }
+    try { if (e) line.releasePointerCapture(e.pointerId); } catch (err) {}
+  }
+
+  line.addEventListener("pointerdown", onDown);
+  line.addEventListener("pointermove", onMove);
+  line.addEventListener("pointerup", onUp);
+  line.addEventListener("pointercancel", onUp);
+  line.addEventListener("wheel", function (e) {
+    e.preventDefault();
+    sendWheelDelta(e.deltaY < 0 ? 120 : -120);
+  }, { passive: false });
+  line.addEventListener("contextmenu", function (e) { e.preventDefault(); });
 })();
 </script>
 
