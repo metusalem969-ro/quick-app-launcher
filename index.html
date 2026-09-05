@@ -530,6 +530,28 @@
       line-height: 1.1;
     }
     .app-grid .btn .emoji { font-size: 22px; }
+    .app-hint {
+      margin: 0 0 12px;
+      color: #66ddcc;
+      font-size: 12px;
+      line-height: 1.35;
+    }
+    .app-tile {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 0;
+    }
+    .app-tile .app-open {
+      margin: 0;
+      min-height: 72px;
+    }
+    .app-tile .app-close {
+      margin: 0;
+      padding: 8px 4px;
+      font-size: 11px;
+      min-height: 36px;
+    }
 
     /* ===== Bara de taburi ===== */
     .tabbar {
@@ -695,18 +717,8 @@
     <!-- Lansare aplicații -->
     <div class="panel priority-2">
         <h2>🚀 Aplicații</h2>
-        <div class="app-grid">
-            <button class="btn btn-cyan" onclick="launchApp('explorer', this)"><span class="emoji">📁</span> Explorer</button>
-            <button class="btn btn-blue" onclick="launchApp('chrome', this)"><span class="emoji">🌐</span> Chrome</button>
-            <button class="btn btn-orange" onclick="launchApp('brave', this)"><span class="emoji">🦁</span> Brave</button>
-            <button class="btn btn-green" onclick="launchApp('notepad', this)"><span class="emoji">📝</span> Notepad</button>
-            <button class="btn btn-purple" onclick="launchApp('calc', this)"><span class="emoji">🧮</span> Calc</button>
-            <button class="btn btn-cyan" onclick="launchApp('code', this)"><span class="emoji">💻</span> VS Code</button>
-            <button class="btn btn-blue" onclick="launchApp('vlc', this)"><span class="emoji">🎬</span> VLC</button>
-            <button class="btn btn-green" onclick="launchApp('word', this)"><span class="emoji">📄</span> Word</button>
-            <button class="btn btn-orange" onclick="launchApp('excel', this)"><span class="emoji">📊</span> Excel</button>
-            <button class="btn btn-red" onclick="launchApp('taskmgr', this)"><span class="emoji">📈</span> Task Mgr</button>
-        </div>
+        <p class="app-hint">▶ Deschide · ✕ Închide — primești mesaj când s-a deschis sau s-a închis</p>
+        <div class="app-grid" id="appGrid"></div>
     </div>
 
     <!-- Comutare ferestre deschise -->
@@ -1118,19 +1130,86 @@ try {
     if (typeof showFeedback === "function") showFeedback("📨 Text trimis");
   }
 
-  // ===== Lansare aplicații (/launch?app=) =====
+  // ===== Lansare / închidere aplicații =====
+  var CONTROL_APPS = [
+    {key:"explorer", name:"Explorer", emoji:"📁", color:"btn-cyan"},
+    {key:"chrome", name:"Chrome", emoji:"🌐", color:"btn-blue"},
+    {key:"brave", name:"Brave", emoji:"🦁", color:"btn-orange"},
+    {key:"notepad", name:"Notepad", emoji:"📝", color:"btn-green"},
+    {key:"calc", name:"Calculator", emoji:"🧮", color:"btn-purple"},
+    {key:"code", name:"VS Code", emoji:"💻", color:"btn-cyan"},
+    {key:"cursor", name:"Cursor", emoji:"✨", color:"btn-purple"},
+    {key:"zed", name:"Zed", emoji:"⚡", color:"btn-orange"},
+    {key:"visualstudio", name:"VS 2022", emoji:"🟣", color:"btn-purple"},
+    {key:"arduino", name:"Arduino", emoji:"🔌", color:"btn-cyan"},
+    {key:"wt", name:"Terminal", emoji:"⌨️", color:"btn-blue"},
+    {key:"git", name:"Git Bash", emoji:"🐙", color:"btn-orange"},
+    {key:"gitgui", name:"Git GUI", emoji:"🧰", color:"btn-green"},
+    {key:"easyeda", name:"EasyEDA", emoji:"📐", color:"btn-cyan"},
+    {key:"solidworks", name:"SOLIDWORKS", emoji:"🧩", color:"btn-blue"},
+    {key:"orcaslicer", name:"OrcaSlicer", emoji:"🖨️", color:"btn-orange"},
+    {key:"nrfconnect", name:"nRF Connect", emoji:"📡", color:"btn-purple"},
+    {key:"vlc", name:"VLC", emoji:"🎬", color:"btn-blue"},
+    {key:"keepassxc", name:"KeePassXC", emoji:"🔑", color:"btn-green"},
+    {key:"revo", name:"Revo", emoji:"🧹", color:"btn-red"},
+    {key:"qbittorrent", name:"qBittorrent", emoji:"📥", color:"btn-orange"},
+    {key:"word", name:"Word", emoji:"📄", color:"btn-green"},
+    {key:"excel", name:"Excel", emoji:"📊", color:"btn-orange"},
+    {key:"taskmgr", name:"Task Mgr", emoji:"📈", color:"btn-red"}
+  ];
+
+  function appLabel(app) {
+    for (var i = 0; i < CONTROL_APPS.length; i++) {
+      if (CONTROL_APPS[i].key === app) return CONTROL_APPS[i].name;
+    }
+    return app;
+  }
+
+  function renderAppGrid() {
+    var grid = document.getElementById("appGrid");
+    if (!grid) return;
+    grid.innerHTML = CONTROL_APPS.map(function (a) {
+      return (
+        '<div class="app-tile">' +
+          '<button class="btn ' + a.color + ' app-open" onclick="launchApp(\'' + a.key + '\', this)">' +
+            '<span class="emoji">' + a.emoji + '</span>' + a.name +
+          '</button>' +
+          '<button class="btn btn-red app-close" onclick="killApp(\'' + a.key + '\', this)" title="Închide ' + a.name + '">✕ Închide</button>' +
+        '</div>'
+      );
+    }).join("");
+  }
+
   function launchApp(app, btn) {
+    var name = appLabel(app);
     if (btn) { btn.classList.remove("pulse"); void btn.offsetWidth; btn.classList.add("pulse"); }
+    if (typeof showFeedback === "function") showFeedback("🚀 Deschid " + name + "…");
     fetch("http://" + serverIP + ":" + serverPort + "/launch?app=" + encodeURIComponent(app), { cache: "no-store", mode: "cors" })
       .then(function (r) { return r.json().catch(function () { return {}; }); })
       .then(function (j) {
         if (j && j.ok === false) {
-          if (typeof showFeedback === "function") showFeedback("❌ " + app + ": " + (j.error || "eroare"), true);
+          if (typeof showFeedback === "function") showFeedback("❌ " + name + " NU s-a deschis: " + (j.error || "eroare"), true);
         } else if (typeof showFeedback === "function") {
-          showFeedback("🚀 Pornit: " + app);
+          showFeedback("✅ Deschis: " + name);
         }
       })
-      .catch(function () { if (typeof showFeedback === "function") showFeedback("❌ Fără conexiune", true); });
+      .catch(function () { if (typeof showFeedback === "function") showFeedback("❌ Fără conexiune — nu pot deschide " + name, true); });
+  }
+
+  function killApp(app, btn) {
+    var name = appLabel(app);
+    if (btn) { btn.classList.remove("pulse"); void btn.offsetWidth; btn.classList.add("pulse"); }
+    if (typeof showFeedback === "function") showFeedback("🛑 Închid " + name + "…");
+    fetch("http://" + serverIP + ":" + serverPort + "/kill?app=" + encodeURIComponent(app), { cache: "no-store", mode: "cors" })
+      .then(function (r) { return r.json().catch(function () { return {}; }); })
+      .then(function (j) {
+        if (j && j.ok === false) {
+          if (typeof showFeedback === "function") showFeedback("❌ " + name + " NU s-a închis: " + (j.error || "eroare"), true);
+        } else if (typeof showFeedback === "function") {
+          showFeedback("✅ Închis: " + name);
+        }
+      })
+      .catch(function () { if (typeof showFeedback === "function") showFeedback("❌ Fără conexiune — nu pot închide " + name, true); });
   }
 
   // ===== Secțiuni pliabile + memorare stare =====
@@ -1187,6 +1266,7 @@ try {
 
   document.addEventListener("DOMContentLoaded", function () {
     refreshConnFields();
+    renderAppGrid();
     initTabs();
     initCollapsibleSections();
     pingServer();
