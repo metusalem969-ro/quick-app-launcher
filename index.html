@@ -552,6 +552,30 @@
       font-size: 11px;
       min-height: 36px;
     }
+    .app-live {
+      text-align: left;
+      margin: 0 0 12px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(0,255,136,0.45);
+      background: rgba(0,255,136,0.08);
+      color: #c8ffe8;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .app-live strong { color: #00ff88; }
+    .app-tile.running .app-open {
+      box-shadow: 0 0 18px #00ff88;
+      outline: 2px solid #00ff88;
+    }
+    .app-tile.running .app-open::after {
+      content: "PORNIT";
+      display: block;
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      color: #003322;
+      font-weight: 700;
+    }
 
     /* ===== Bara de taburi ===== */
     .tabbar {
@@ -717,7 +741,11 @@
     <!-- Lansare aplicații -->
     <div class="panel priority-2">
         <h2>🚀 Aplicații</h2>
-        <p class="app-hint">▶ Deschide · ✕ Închide — primești mesaj când s-a deschis sau s-a închis</p>
+        <p class="app-hint">▶ Deschide · ✕ Închide — butonul verde PORNIT = programul e deschis acum</p>
+        <div class="app-live" id="appLiveStatus">
+          <div><strong>Pe ecran acum:</strong> <span id="appForeground">verific…</span></div>
+          <div><strong>Deschise:</strong> <span id="appRunningNames">verific…</span></div>
+        </div>
         <div class="app-grid" id="appGrid"></div>
     </div>
 
@@ -1136,7 +1164,7 @@ try {
     {key:"chrome", name:"Chrome", emoji:"🌐", color:"btn-blue"},
     {key:"brave", name:"Brave", emoji:"🦁", color:"btn-orange"},
     {key:"notepad", name:"Notepad", emoji:"📝", color:"btn-green"},
-    {key:"calc", name:"Calculator", emoji:"🧮", color:"btn-purple"},
+    {key:"calc", name:"CALC M969", emoji:"🧮", color:"btn-purple"},
     {key:"code", name:"VS Code", emoji:"💻", color:"btn-cyan"},
     {key:"cursor", name:"Cursor", emoji:"✨", color:"btn-purple"},
     {key:"zed", name:"Zed", emoji:"⚡", color:"btn-orange"},
@@ -1170,7 +1198,7 @@ try {
     if (!grid) return;
     grid.innerHTML = CONTROL_APPS.map(function (a) {
       return (
-        '<div class="app-tile">' +
+        '<div class="app-tile" data-app="' + a.key + '">' +
           '<button class="btn ' + a.color + ' app-open" onclick="launchApp(\'' + a.key + '\', this)">' +
             '<span class="emoji">' + a.emoji + '</span>' + a.name +
           '</button>' +
@@ -1178,6 +1206,31 @@ try {
         '</div>'
       );
     }).join("");
+    refreshOpenApps();
+  }
+
+  function refreshOpenApps() {
+    var fgEl = document.getElementById("appForeground");
+    var listEl = document.getElementById("appRunningNames");
+    fetch("http://" + serverIP + ":" + serverPort + "/openapps", { cache: "no-store", mode: "cors" })
+      .then(function (r) { return r.json().catch(function () { return {}; }); })
+      .then(function (j) {
+        var fg = (j.foreground && (j.foreground.title || j.foreground.process)) || "necunoscut";
+        if (fgEl) fgEl.textContent = fg;
+        var running = (j.running || []).map(function (x) { return x.key; });
+        var runningSet = {};
+        running.forEach(function (k) { runningSet[k] = true; });
+        var names = CONTROL_APPS.filter(function (a) { return runningSet[a.key]; })
+          .map(function (a) { return a.name; });
+        if (listEl) listEl.textContent = names.length ? names.join(", ") : "nimic din listă";
+        document.querySelectorAll(".app-tile[data-app]").forEach(function (tile) {
+          tile.classList.toggle("running", !!runningSet[tile.getAttribute("data-app")]);
+        });
+      })
+      .catch(function () {
+        if (fgEl) fgEl.textContent = "fără conexiune";
+        if (listEl) listEl.textContent = "fără conexiune";
+      });
   }
 
   function launchApp(app, btn) {
@@ -1192,6 +1245,7 @@ try {
         } else if (typeof showFeedback === "function") {
           showFeedback("✅ Deschis: " + name);
         }
+        setTimeout(refreshOpenApps, 700);
       })
       .catch(function () { if (typeof showFeedback === "function") showFeedback("❌ Fără conexiune — nu pot deschide " + name, true); });
   }
@@ -1208,6 +1262,7 @@ try {
         } else if (typeof showFeedback === "function") {
           showFeedback("✅ Închis: " + name);
         }
+        setTimeout(refreshOpenApps, 500);
       })
       .catch(function () { if (typeof showFeedback === "function") showFeedback("❌ Fără conexiune — nu pot închide " + name, true); });
   }
@@ -1271,6 +1326,8 @@ try {
     initCollapsibleSections();
     pingServer();
     setInterval(pingServer, 15000);
+    refreshOpenApps();
+    setInterval(refreshOpenApps, 4000);
   });
 
   // Variabile pentru tracking poziție mouse (estimativă)
