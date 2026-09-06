@@ -5,7 +5,7 @@
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
 <meta http-equiv="Pragma" content="no-cache"/>
-<title>ESP32 Pro Control v1.4</title>
+<title>ESP32 Pro Control v1.5</title>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700&display=swap" rel="stylesheet"/>
 <style>
     *, *::before, *::after { box-sizing: border-box; }
@@ -728,6 +728,34 @@
       font-size: 15px;
       text-align: right;
     }
+    .video-bar {
+      margin: 0 0 16px;
+      padding: 12px;
+      border-radius: 14px;
+      border: 1px solid rgba(0,255,136,0.4);
+      background: rgba(0,255,136,0.08);
+      text-align: left;
+    }
+    .video-bar h3 {
+      margin: 0 0 10px;
+      color: #00ff88;
+      font-size: 14px;
+      text-shadow: none;
+    }
+    .video-bar .video-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+    .video-bar .btn {
+      margin: 0;
+      padding: 12px 6px;
+      font-size: 13px;
+      min-height: 48px;
+    }
+    .video-bar .vol-row {
+      margin: 10px 0 0;
+    }
 
     /* ===== Bara de taburi ===== */
     .tabbar {
@@ -840,7 +868,7 @@
 </style>
 </head>
 <body>
-<h1>🎮 ESP32 Pro Control <span style="font-size:0.45em;color:#00ff88;vertical-align:middle;">v1.4</span></h1>
+<h1>🎮 ESP32 Pro Control <span style="font-size:0.45em;color:#00ff88;vertical-align:middle;">v1.5</span></h1>
 <p id="controlTargetHint" style="font-size:0.82rem;color:#66ddcc;margin:6px 0 18px;max-width:900px;margin-left:auto;margin-right:auto;line-height:1.35;"></p>
 
 <div class="tabbar" id="tabBar">
@@ -931,8 +959,7 @@
         <h2>🎵 Audio & Video</h2>
         <div class="vol-row">
             <span aria-hidden="true">🔊</span>
-            <input type="range" id="volSlider" min="0" max="100" step="1" value="50"
-                   aria-label="Volum PC">
+            <input class="vol-slider" id="volSlider" type="range" min="0" max="100" step="1" value="50" aria-label="Volum PC">
             <span class="vol-pct" id="volPct">50%</span>
         </div>
         <button class="btn state-unmute" id="btnMute" onclick="toggleMute()">
@@ -985,6 +1012,26 @@
     <!-- Mouse Movement FIXED -->
     <div class="panel priority-1">
         <h2>🖱️ Mouse Movement (FIXED!)</h2>
+
+        <div class="video-bar">
+            <h3>🎬 Video — înainte / înapoi / volum</h3>
+            <div class="video-grid">
+                <button class="btn btn-orange" onclick="sendFeedback('skip_back', this)">⏪ Înapoi</button>
+                <button class="btn btn-green" onclick="togglePlayPause()">▶️ Play</button>
+                <button class="btn btn-orange" onclick="sendFeedback('skip_fwd', this)">⏩ Înainte</button>
+                <button class="btn btn-blue" onclick="sendFeedback('volume_down', this); setTimeout(refreshVolume, 200)">🔉 Vol −</button>
+                <button class="btn btn-cyan" onclick="toggleMute()">🔇 Mute</button>
+                <button class="btn btn-blue" onclick="sendFeedback('volume_up', this); setTimeout(refreshVolume, 200)">🔊 Vol +</button>
+                <button class="btn btn-purple" onclick="sendFeedback('prev_track', this)">⏮️ Prev</button>
+                <button class="btn state-fs-on" onclick="sendFeedback('fullscreen_video', this)">⛶ Ecran</button>
+                <button class="btn btn-purple" onclick="sendFeedback('next_track', this)">⏭️ Next</button>
+            </div>
+            <div class="vol-row">
+                <span aria-hidden="true">🔊</span>
+                <input class="vol-slider" type="range" min="0" max="100" step="1" value="50" aria-label="Volum PC">
+                <span class="vol-pct">50%</span>
+            </div>
+        </div>
 
         <div class="live-screen-wrap" id="liveScreenWrap">
             <div class="live-screen-head">
@@ -1540,10 +1587,14 @@ try {
   var volTimer = null;
 
   function applyVolumeUi(percent, mutedFlag) {
-    var slider = document.getElementById("volSlider");
-    var label = document.getElementById("volPct");
-    if (typeof percent === "number" && !volDrag && slider) slider.value = String(percent);
-    if (label && typeof percent === "number") label.textContent = percent + "%";
+    if (typeof percent === "number" && !volDrag) {
+      document.querySelectorAll(".vol-slider").forEach(function (slider) {
+        slider.value = String(percent);
+      });
+      document.querySelectorAll(".vol-pct").forEach(function (label) {
+        label.textContent = percent + "%";
+      });
+    }
     if (typeof mutedFlag === "boolean") {
       muted = mutedFlag;
       var emoji = document.getElementById("emojiMute");
@@ -1566,27 +1617,32 @@ try {
 
   function setVolumeFromSlider(pct, silent) {
     pct = Math.max(0, Math.min(100, parseInt(pct, 10) || 0));
-    var label = document.getElementById("volPct");
-    if (label) label.textContent = pct + "%";
+    document.querySelectorAll(".vol-pct").forEach(function (label) {
+      label.textContent = pct + "%";
+    });
     sendCommand("volume_set", "pct=" + pct, silent !== false);
   }
 
   function initVolumeSlider() {
-    var slider = document.getElementById("volSlider");
-    if (!slider) return;
-    slider.addEventListener("pointerdown", function () { volDrag = true; });
-    slider.addEventListener("pointerup", function () { volDrag = false; });
-    slider.addEventListener("input", function () {
-      var pct = slider.value;
-      var label = document.getElementById("volPct");
-      if (label) label.textContent = pct + "%";
-      if (volTimer) clearTimeout(volTimer);
-      volTimer = setTimeout(function () { setVolumeFromSlider(pct, true); }, 60);
-    });
-    slider.addEventListener("change", function () {
-      if (volTimer) clearTimeout(volTimer);
-      setVolumeFromSlider(slider.value, true);
-      volDrag = false;
+    document.querySelectorAll(".vol-slider").forEach(function (slider) {
+      slider.addEventListener("pointerdown", function () { volDrag = true; });
+      slider.addEventListener("pointerup", function () { volDrag = false; });
+      slider.addEventListener("input", function () {
+        var pct = slider.value;
+        document.querySelectorAll(".vol-pct").forEach(function (label) {
+          label.textContent = pct + "%";
+        });
+        document.querySelectorAll(".vol-slider").forEach(function (other) {
+          if (other !== slider) other.value = pct;
+        });
+        if (volTimer) clearTimeout(volTimer);
+        volTimer = setTimeout(function () { setVolumeFromSlider(pct, true); }, 60);
+      });
+      slider.addEventListener("change", function () {
+        if (volTimer) clearTimeout(volTimer);
+        setVolumeFromSlider(slider.value, true);
+        volDrag = false;
+      });
     });
   }
 
